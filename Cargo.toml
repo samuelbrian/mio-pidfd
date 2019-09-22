@@ -1,0 +1,15 @@
+[package]
+name = "mio-pidfd"
+version = "0.1.0"
+authors = ["Samuel Brian <atticus.brian@gmail.com>"]
+edition = "2018"
+description = "mio support for Linux's pidfd"
+repository = "https://github.com/samuelbrian/mio-pidfd"
+documentation = "https://docs.rs/mio-pidfd"
+keywords = ["asynchronous", "mio", "pidfd", "pid", "process", "linux"]
+categories = ["asynchronous"]
+license = "MIT"
+
+[dependencies]
+mio = "0.6"
+libc = "0.2"
