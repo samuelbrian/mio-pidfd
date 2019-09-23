@@ -10,8 +10,9 @@ Heavily inspired by [mio-timerfd](https://crates.io/crates/mio-timerfd)
 
 ```rust
 use mio_pidfd::PidFd;
-use std::process::{Command, Child};
 use mio::{Poll, Events, Token, Ready, PollOpt};
+use std::process::{Command, Child};
+
 let poll = Poll::new().unwrap();
 let mut events = Events::with_capacity(1024);
 let mut child = Command::new("/bin/sleep").arg("1").spawn().unwrap();

@@ -12,8 +12,9 @@
 //!
 //! ```rust
 //! use mio_pidfd::PidFd;
-//! use std::process::{Command, Child};
 //! use mio::{Poll, Events, Token, Ready, PollOpt};
+//! use std::process::{Command, Child};
+//!
 //! let poll = Poll::new().unwrap();
 //! let mut events = Events::with_capacity(1024);
 //! let mut child = Command::new("/bin/sleep").arg("1").spawn().unwrap();
@@ -32,13 +33,13 @@
 //! The `pidfd_send_signal()` system call (used by supplementary `kill()`
 //! functionality) was introduced in Linux kernel version 5.1
 
-use std::process::Child;
-use std::io;
-use std::convert::TryInto;
-use std::os::unix::io::{AsRawFd, RawFd};
 use libc::{c_int, c_uint, pid_t, siginfo_t};
 use mio::unix::EventedFd;
 use mio::{Evented, Poll, PollOpt, Ready, Token};
+use std::convert::TryInto;
+use std::io;
+use std::os::unix::io::{AsRawFd, RawFd};
+use std::process::Child;
 
 #[cfg(not(target_os = "linux"))]
 compile_error!("pidfd is a linux specific feature");
@@ -89,8 +90,12 @@ unsafe fn pidfd_create(pid: pid_t, flags: c_uint) -> c_int {
 ///
 /// Return: 0 on success, negative errno on failure
 ///
-unsafe fn pidfd_send_signal(pidfd: c_int, sig: c_int,
-        info: *const siginfo_t, flags: c_uint) -> c_int {
+unsafe fn pidfd_send_signal(
+    pidfd: c_int,
+    sig: c_int,
+    info: *const siginfo_t,
+    flags: c_uint,
+) -> c_int {
     syscall(NR_PIDFD_SEND_SIGNAL, pidfd, sig, info, flags)
 }
 
@@ -107,16 +112,17 @@ pub struct PidFd {
 }
 
 impl PidFd {
-
     /// Create a new pidfd from a child process.
     /// This may be registerd with a mio poll.
-    pub fn new(child: & Child) -> io::Result<Self> {
+    pub fn new(child: &Child) -> io::Result<Self> {
         let flags = 0;
         let pid: pid_t = match child.id().try_into() {
             Ok(pid) => pid,
             Err(_) => {
-                return Err(io::Error::new(io::ErrorKind::Other,
-                    "child process id outside range of pid_t"))
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "child process id outside range of pid_t",
+                ))
             }
         };
         Self::open(pid, flags)
@@ -125,16 +131,14 @@ impl PidFd {
     /// Send a signal to the process using the pidfd.
     /// Use `std::process::Child::kill()` over this. This `kill()` is here
     /// only for the completeness of the pidfd system calls abstraction.
-    pub fn kill(& self, sig: c_int) -> io::Result<()> {
+    pub fn kill(&self, sig: c_int) -> io::Result<()> {
         self.send_signal(sig, std::ptr::null(), 0)
     }
 
     /// Wrapper to `pidfd_open` system call.
     /// Use instead of `new()` when extra parameters are desired.
     pub fn open(pid: pid_t, flags: c_uint) -> io::Result<Self> {
-        let fd = unsafe {
-            pidfd_create(pid, flags)
-        };
+        let fd = unsafe { pidfd_create(pid, flags) };
         if fd == -1 {
             Err(io::Error::last_os_error())
         } else {
@@ -144,11 +148,8 @@ impl PidFd {
 
     /// Wrapper to `pidfd_send_signal` system call.
     /// Use instead of `kill()` when extra parameters are desired.
-    pub fn send_signal(& self, sig: c_int, info: *const siginfo_t,
-            flags: c_uint) -> io::Result<()> {
-        let ret = unsafe {
-            pidfd_send_signal(self.fd, sig, info, flags)
-        };
+    pub fn send_signal(&self, sig: c_int, info: *const siginfo_t, flags: c_uint) -> io::Result<()> {
+        let ret = unsafe { pidfd_send_signal(self.fd, sig, info, flags) };
         if ret == -1 {
             Err(io::Error::last_os_error())
         } else {
@@ -192,10 +193,10 @@ impl Evented for PidFd {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::process::Command;
-    use std::os::unix::process::ExitStatusExt;
-    use std::time::Duration;
     use mio::Events;
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::Command;
+    use std::time::Duration;
 
     const TOK1: Token = Token(1);
     const TOK2: Token = Token(2);
@@ -205,9 +206,7 @@ mod tests {
     #[test]
     fn pidfd_new_and_kill() {
         let sig = libc::SIGABRT;
-        let mut child = Command::new("/bin/sleep")
-                        .arg("5")
-                        .spawn().unwrap();
+        let mut child = Command::new("/bin/sleep").arg("5").spawn().unwrap();
 
         let fd = PidFd::new(&child).unwrap();
         fd.kill(sig).unwrap();
@@ -224,18 +223,17 @@ mod tests {
     #[should_panic]
     fn pidfd_kill_invalid_signal() {
         let sig = -1;
-        let child = Command::new("/bin/sleep")
-                        .arg("0")
-                        .spawn().unwrap();
+        let child = Command::new("/bin/sleep").arg("0").spawn().unwrap();
 
         let fd = PidFd::new(&child).unwrap();
         fd.kill(sig).unwrap();
     }
 
-    fn create_sleeper(poll: & Poll, timeout: Duration, token: Token) -> Child {
+    fn create_sleeper(poll: &Poll, timeout: Duration, token: Token) -> Child {
         let child = Command::new("/bin/sleep")
-                        .arg(format!("{}", timeout.as_secs()))
-                        .spawn().unwrap();
+            .arg(format!("{}", timeout.as_secs()))
+            .spawn()
+            .unwrap();
         let pidfd = PidFd::new(&child).unwrap();
 
         poll.register(&pidfd, token, Ready::readable(), PollOpt::edge())
@@ -251,27 +249,28 @@ mod tests {
         let mut child = create_sleeper(&poll, TIMEOUT2, TOK2);
 
         // child should not exit before the timeout
-        poll.poll(&mut events, Some(TIMEOUT2/2)).unwrap();
+        poll.poll(&mut events, Some(TIMEOUT2 / 2)).unwrap();
         assert!(events.is_empty());
         match child.try_wait() {
-            Ok(None) => {},
+            Ok(None) => {}
             Ok(Some(status)) => {
                 panic!("child exited without poll event: {}", status);
             }
-            Err(e) => panic!("child error without poll event: {}", e)
+            Err(e) => panic!("child error without poll event: {}", e),
         }
 
         // child should exit with an event
         poll.poll(&mut events, Some(TIMEOUT2)).unwrap();
         assert!(!events.is_empty());
         match child.try_wait() {
-            Ok(Some(_)) => {},
+            Ok(Some(_)) => {}
             Ok(None) => panic!("poll event occured but child has not exited"),
-            Err(e) => panic!("child error without poll event: {}", e)
+            Err(e) => panic!("child error without poll event: {}", e),
         }
 
         // child should not cause event again after exit
-        poll.poll(&mut events, Some(Duration::from_nanos(1))).unwrap();
+        poll.poll(&mut events, Some(Duration::from_nanos(1)))
+            .unwrap();
         assert!(events.is_empty());
     }
 
@@ -283,19 +282,17 @@ mod tests {
         let mut child2 = create_sleeper(&poll, TIMEOUT2, TOK2);
 
         // neither child should exit before the timeout
-        poll.poll(&mut events, Some(TIMEOUT1/2)).unwrap();
+        poll.poll(&mut events, Some(TIMEOUT1 / 2)).unwrap();
         assert!(events.is_empty());
         match child1.try_wait() {
-            Ok(None) => {},
-            Ok(Some(status)) => panic!("child1 exited without poll event: {}",
-                                       status),
+            Ok(None) => {}
+            Ok(Some(status)) => panic!("child1 exited without poll event: {}", status),
             Err(e) => panic!("child1 error without poll event: {}", e),
         }
         match child2.try_wait() {
             Ok(None) => {}
-            Ok(Some(status)) => panic!("child2 exited without poll event: {}",
-                                       status),
-            Err(e) => panic!("child2 error without poll event: {}", e)
+            Ok(Some(status)) => panic!("child2 exited without poll event: {}", status),
+            Err(e) => panic!("child2 error without poll event: {}", e),
         }
 
         // child1 should exit with an event
@@ -307,7 +304,7 @@ mod tests {
         match child1.try_wait() {
             Ok(Some(_)) => {}
             Ok(None) => panic!("poll event occured but child1 has not exited"),
-            Err(e) => panic!("child1 error without poll event: {}", e)
+            Err(e) => panic!("child1 error without poll event: {}", e),
         }
 
         // child2 should exit with an event
@@ -319,11 +316,12 @@ mod tests {
         match child2.try_wait() {
             Ok(Some(_)) => {}
             Ok(None) => panic!("poll event occured but child2 has not exited"),
-            Err(e) => panic!("child2 error without poll event: {}", e)
+            Err(e) => panic!("child2 error without poll event: {}", e),
         }
 
         // child should not cause event again after exit
-        poll.poll(&mut events, Some(Duration::from_nanos(1))).unwrap();
+        poll.poll(&mut events, Some(Duration::from_nanos(1)))
+            .unwrap();
         assert!(events.is_empty());
     }
 }
