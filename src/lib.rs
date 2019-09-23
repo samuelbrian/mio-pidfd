@@ -215,26 +215,21 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn pidfd_open_invalid_pid() {
-        match PidFd::open(-1, 0) {
-            Ok(_) => panic!("PidFd::open should have failed on invalid input"),
-            _ => {}
-        }
+        PidFd::open(-1, 0).unwrap();
     }
 
     #[test]
+    #[should_panic]
     fn pidfd_kill_invalid_signal() {
         let sig = -1;
-        let mut child = Command::new("/bin/sleep")
+        let child = Command::new("/bin/sleep")
                         .arg("0")
                         .spawn().unwrap();
 
         let fd = PidFd::new(&child).unwrap();
-        match fd.kill(sig) {
-            Ok(_) => panic!("PidFd::kill should have failed on invalid input"),
-            _ => {}
-        }
-        child.wait().unwrap();
+        fd.kill(sig).unwrap();
     }
 
     fn create_sleeper(poll: & Poll, timeout: Duration, token: Token) -> Child {
