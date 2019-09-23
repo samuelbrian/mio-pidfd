@@ -164,6 +164,12 @@ impl AsRawFd for PidFd {
     }
 }
 
+impl Drop for PidFd {
+    fn drop(&mut self) {
+        let _ = unsafe { libc::close(self.fd) };
+    }
+}
+
 impl Evented for PidFd {
     fn register(
         &self,
@@ -229,7 +235,7 @@ mod tests {
         fd.kill(sig).unwrap();
     }
 
-    fn create_sleeper(poll: &Poll, timeout: Duration, token: Token) -> Child {
+    fn create_sleeper(poll: &Poll, timeout: Duration, token: Token) -> (Child, PidFd) {
         let child = Command::new("/bin/sleep")
             .arg(format!("{}", timeout.as_secs()))
             .spawn()
@@ -239,14 +245,14 @@ mod tests {
         poll.register(&pidfd, token, Ready::readable(), PollOpt::edge())
             .unwrap();
 
-        return child;
+        return (child, pidfd);
     }
 
     #[test]
     fn single_process() {
         let poll = Poll::new().unwrap();
         let mut events = Events::with_capacity(1024);
-        let mut child = create_sleeper(&poll, TIMEOUT2, TOK2);
+        let (mut child, _pidfd) = create_sleeper(&poll, TIMEOUT2, TOK2);
 
         // child should not exit before the timeout
         poll.poll(&mut events, Some(TIMEOUT2 / 2)).unwrap();
@@ -278,8 +284,8 @@ mod tests {
     fn multi_process() {
         let poll = Poll::new().unwrap();
         let mut events = Events::with_capacity(1024);
-        let mut child1 = create_sleeper(&poll, TIMEOUT1, TOK1);
-        let mut child2 = create_sleeper(&poll, TIMEOUT2, TOK2);
+        let (mut child1, _pidfd1) = create_sleeper(&poll, TIMEOUT1, TOK1);
+        let (mut child2, _pidfd2) = create_sleeper(&poll, TIMEOUT2, TOK2);
 
         // neither child should exit before the timeout
         poll.poll(&mut events, Some(TIMEOUT1 / 2)).unwrap();
