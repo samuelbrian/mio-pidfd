@@ -6,7 +6,7 @@ edition = "2018"
 description = "mio support for Linux's pidfd"
 repository = "https://github.com/samuelbrian/mio-pidfd"
 documentation = "https://docs.rs/mio-pidfd"
-keywords = ["asynchronous", "mio", "pidfd", "pid", "process", "linux"]
+keywords = ["asynchronous", "mio", "pidfd", "pid", "linux"]
 categories = ["asynchronous"]
 license = "MIT"
 
