@@ -40,6 +40,7 @@ use std::convert::TryInto;
 use std::io;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::process::Child;
+use std::ptr;
 
 #[cfg(not(target_os = "linux"))]
 compile_error!("pidfd is a linux specific feature");
@@ -132,7 +133,7 @@ impl PidFd {
     /// Use `std::process::Child::kill()` over this. This `kill()` is here
     /// only for the completeness of the pidfd system calls abstraction.
     pub fn kill(&self, sig: c_int) -> io::Result<()> {
-        self.send_signal(sig, std::ptr::null(), 0)
+        self.send_signal(sig, None, 0)
     }
 
     /// Wrapper to `pidfd_open` system call.
@@ -148,7 +149,8 @@ impl PidFd {
 
     /// Wrapper to `pidfd_send_signal` system call.
     /// Use instead of `kill()` when extra parameters are desired.
-    pub fn send_signal(&self, sig: c_int, info: *const siginfo_t, flags: c_uint) -> io::Result<()> {
+    pub fn send_signal(&self, sig: c_int, info: Option<&siginfo_t>, flags: c_uint) -> io::Result<()> {
+        let info = info.map_or_else(ptr::null, |info| info);
         let ret = unsafe { pidfd_send_signal(self.fd, sig, info, flags) };
         if ret == -1 {
             Err(io::Error::last_os_error())
