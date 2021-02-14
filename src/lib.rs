@@ -12,16 +12,17 @@
 //!
 //! ```rust
 //! use mio_pidfd::PidFd;
-//! use mio::{Poll, Events, Token, Ready, PollOpt};
+//! use mio::{Poll, Interest, Events, Token};
 //! use std::process::{Command, Child};
 //!
-//! let poll = Poll::new().unwrap();
+//! let mut poll = Poll::new().unwrap();
 //! let mut events = Events::with_capacity(1024);
 //! let mut child = Command::new("/bin/sleep").arg("1").spawn().unwrap();
-//! let pidfd = PidFd::new(&child).unwrap();
+//! let mut pidfd = PidFd::new(&child).unwrap();
 //!
-//! poll.register(&pidfd, Token(0), Ready::readable(), PollOpt::edge())
-//!              .unwrap();
+//! poll.registry()
+//!     .register(&mut pidfd, Token(0), Interest::READABLE)
+//!     .unwrap();
 //!
 //! poll.poll(&mut events, None).unwrap();
 //! assert!(child.try_wait().unwrap().unwrap().code().unwrap() == 0);
@@ -34,8 +35,9 @@
 //! functionality) was introduced in Linux kernel version 5.1
 
 use libc::{c_int, c_uint, pid_t, siginfo_t};
-use mio::unix::EventedFd;
-use mio::{Evented, Poll, PollOpt, Ready, Token};
+use mio::event::Source;
+use mio::unix::SourceFd;
+use mio::{Interest, Registry, Token};
 use std::convert::TryInto;
 use std::io;
 use std::os::unix::io::{AsRawFd, RawFd};
@@ -172,36 +174,34 @@ impl Drop for PidFd {
     }
 }
 
-impl Evented for PidFd {
+impl Source for PidFd {
     fn register(
-        &self,
-        poll: &Poll,
+        &mut self,
+        registry: &Registry,
         token: Token,
-        interest: Ready,
-        opts: PollOpt,
+        interest: Interest,
     ) -> io::Result<()> {
-        EventedFd(&self.fd).register(poll, token, interest, opts)
+        SourceFd(&self.fd).register(registry, token, interest)
     }
 
     fn reregister(
-        &self,
-        poll: &Poll,
+        &mut self,
+        registry: &Registry,
         token: Token,
-        interest: Ready,
-        opts: PollOpt,
+        interest: Interest,
     ) -> io::Result<()> {
-        EventedFd(&self.fd).reregister(poll, token, interest, opts)
+        SourceFd(&self.fd).reregister(registry, token, interest)
     }
 
-    fn deregister(&self, poll: &Poll) -> io::Result<()> {
-        EventedFd(&self.fd).deregister(poll)
+    fn deregister(&mut self, registry: &Registry) -> io::Result<()> {
+        SourceFd(&self.fd).deregister(registry)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mio::Events;
+    use mio::{Events, Poll};
     use std::os::unix::process::ExitStatusExt;
     use std::process::Command;
     use std::time::Duration;
@@ -242,9 +242,10 @@ mod tests {
             .arg(format!("{}", timeout.as_secs()))
             .spawn()
             .unwrap();
-        let pidfd = PidFd::new(&child).unwrap();
+        let mut pidfd = PidFd::new(&child).unwrap();
 
-        poll.register(&pidfd, token, Ready::readable(), PollOpt::edge())
+        poll.registry()
+            .register(&mut pidfd, token, Interest::READABLE)
             .unwrap();
 
         return (child, pidfd);
@@ -252,7 +253,7 @@ mod tests {
 
     #[test]
     fn single_process() {
-        let poll = Poll::new().unwrap();
+        let mut poll = Poll::new().unwrap();
         let mut events = Events::with_capacity(1024);
         let (mut child, _pidfd) = create_sleeper(&poll, TIMEOUT2, TOK2);
 
@@ -284,7 +285,7 @@ mod tests {
 
     #[test]
     fn multi_process() {
-        let poll = Poll::new().unwrap();
+        let mut poll = Poll::new().unwrap();
         let mut events = Events::with_capacity(1024);
         let (mut child1, _pidfd1) = create_sleeper(&poll, TIMEOUT1, TOK1);
         let (mut child2, _pidfd2) = create_sleeper(&poll, TIMEOUT2, TOK2);

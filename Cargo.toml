@@ -1,6 +1,6 @@
 [package]
 name = "mio-pidfd"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Samuel Brian <atticus.brian@gmail.com>"]
 edition = "2018"
 description = "mio support for Linux's pidfd"
@@ -11,5 +11,5 @@ categories = ["asynchronous"]
 license = "MIT"
 
 [dependencies]
-mio = "0.6"
+mio = { version = "0.7", features = ["os-ext"] }
 libc = "0.2"
