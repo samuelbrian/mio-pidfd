@@ -277,10 +277,22 @@ mod tests {
             Err(e) => panic!("child error without poll event: {}", e),
         }
 
-        // child should not cause event again after exit
+        // Check for post-exit events
+        // Allow both Linux kernel <6.9 and >=6.9 epoll behaviours to pass the test.
         poll.poll(&mut events, Some(Duration::from_nanos(1)))
             .unwrap();
-        assert!(events.is_empty());
+        if events.iter().count() != 1 {
+            // Prior to Linux kernel 6.9, no second event occured.
+            assert!(events.is_empty())
+        } else {
+            // Linux kernel 6.9 introduced a new behaviour where the process being
+            // reaped causes an EPOLLHUP event.
+            // mio presents this as a second event with read_closed=true and
+            // write_closed=true.
+            let event = events.iter().next().unwrap();
+            assert!(event.is_read_closed());
+            assert!(event.is_write_closed());
+        }
     }
 
     #[test]
@@ -316,6 +328,20 @@ mod tests {
             Err(e) => panic!("child1 error without poll event: {}", e),
         }
 
+        // Check child1's post-exit behaviour.
+        // Allow both Linux kernel <6.9 and >=6.9 epoll behaviours to pass the test.
+        // See single_process test for details.
+        poll.poll(&mut events, Some(Duration::from_nanos(1)))
+            .unwrap();
+        if events.iter().count() != 1 {
+            assert!(events.is_empty())
+        } else {
+            let event = events.iter().next().unwrap();
+            assert!(event.token() == TOK1);
+            assert!(event.is_read_closed());
+            assert!(event.is_write_closed());
+        }
+
         // child2 should exit with an event
         poll.poll(&mut events, Some(TIMEOUT2)).unwrap();
         assert!(!events.is_empty());
@@ -328,9 +354,18 @@ mod tests {
             Err(e) => panic!("child2 error without poll event: {}", e),
         }
 
-        // child should not cause event again after exit
+        // Check child2's post-exit behaviour.
+        // Allow both Linux kernel <6.9 and >=6.9 epoll behaviours to pass the test.
+        // See single_process test for details.
         poll.poll(&mut events, Some(Duration::from_nanos(1)))
             .unwrap();
-        assert!(events.is_empty());
+        if events.iter().count() != 1 {
+            assert!(events.is_empty())
+        } else {
+            let event = events.iter().next().unwrap();
+            assert!(event.token() == TOK2);
+            assert!(event.is_read_closed());
+            assert!(event.is_write_closed());
+        }
     }
 }
