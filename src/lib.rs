@@ -47,66 +47,10 @@ use std::ptr;
 #[cfg(not(target_os = "linux"))]
 compile_error!("pidfd is a linux specific feature");
 
-const NR_PIDFD_OPEN: c_int = 434;
-const NR_PIDFD_SEND_SIGNAL: c_int = 424;
-
 extern "C" {
-    fn syscall(num: c_int, ...) -> c_int;
+    fn pidfd_open(pid: pid_t, flags: c_uint) -> c_int;
+    fn pidfd_send_signal(pid: pid_t, sig: c_int, info: *const siginfo_t, flags: c_uint) -> c_int;
 }
-
-/// `pidfd_create` syscall function.
-/// Perform the system call directly since no libc supports this at time of
-/// writing. Import from libc crate when it is supported there.
-/// --------------------------------------------------
-/// pidfd_create() - Create a new pid file descriptor.
-/// @pid:  struct pid that the pidfd will reference
-///
-/// This creates a new pid file descriptor with the O_CLOEXEC flag set.
-///
-/// Note, that this function can only be called after the fd table has
-/// been unshared to avoid leaking the pidfd to the new process.
-///
-/// Return: On success, a cloexec pidfd is returned.
-///         On error, a negative errno number will be returned.
-unsafe fn pidfd_create(pid: pid_t, flags: c_uint) -> c_int {
-    syscall(NR_PIDFD_OPEN, pid, flags)
-}
-
-/// `pidfd_send_signal` syscall function.
-/// Perform the system call directly since no libc supports this at time of
-/// writing. Import from libc crate when it is supported there.
-/// --------------------------------------------------
-/// sys_pidfd_send_signal - Signal a process through a pidfd
-/// @pidfd:  file descriptor of the process
-/// @sig:    signal to send
-/// @info:   signal info
-/// @flags:  future flags
-///
-/// The syscall currently only signals via PIDTYPE_PID which covers
-/// kill(<positive-pid>, <signal>. It does not signal threads or process
-/// groups.
-/// In order to extend the syscall to threads and process groups the @flags
-/// argument should be used. In essence, the @flags argument will determine
-/// what is signaled and not the file descriptor itself. Put in other words,
-/// grouping is a property of the flags argument not a property of the file
-/// descriptor.
-///
-/// Return: 0 on success, negative errno on failure
-///
-unsafe fn pidfd_send_signal(
-    pidfd: c_int,
-    sig: c_int,
-    info: *const siginfo_t,
-    flags: c_uint,
-) -> c_int {
-    syscall(NR_PIDFD_SEND_SIGNAL, pidfd, sig, info, flags)
-}
-
-//
-//
-// PidFd
-//
-//
 
 /// A Linux pidfd abstraction that can be used to poll the exit status of
 /// multiple child processes using mio.
@@ -141,7 +85,7 @@ impl PidFd {
     /// Wrapper to `pidfd_open` system call.
     /// Use instead of `new()` when extra parameters are desired.
     pub fn open(pid: pid_t, flags: c_uint) -> io::Result<Self> {
-        let fd = unsafe { pidfd_create(pid, flags) };
+        let fd = unsafe { pidfd_open(pid, flags) };
         if fd == -1 {
             Err(io::Error::last_os_error())
         } else {
